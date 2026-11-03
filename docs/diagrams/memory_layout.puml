@@ -1,0 +1,64 @@
+@startuml
+skinparam backgroundColor #FFFFFF
+skinparam defaultFontName "SansSerif"
+skinparam defaultFontSize 12
+skinparam roundCorner 6
+skinparam shadowing false
+
+title Inside the Limit Order Book (How Orders Live in Memory)
+
+package "1. Fast Lookup Table (FlatHashMap)" #EEF6FF {
+    object "order_index_ (OrderId -> OrderNode*)" as Index {
+        Key 101 => Points to OrderNode #101
+        Key 102 => Points to OrderNode #102
+        Key 103 => Points to OrderNode #103
+    }
+}
+
+package "2. Contiguous Bid Price Ladder (std::vector<PriceLevel>)" #F2FBF4 {
+    object "bids_[0]: Price $99.95" as Level1 {
+        total_quantity = 200
+        order_count = 1
+    }
+    object "bids_[1] (.back() = BEST BID): Price $100.00" as Level2 {
+        total_quantity = 450
+        order_count = 2
+    }
+}
+
+package "3. Pre-Allocated Order Pool (ObjectPool<OrderNode>)" #FFF8E7 {
+    object "OrderNode #101" as N101 {
+        id = 101
+        price = $99.95
+        quantity = 200
+        prev = nullptr
+        next = nullptr
+    }
+
+    object "OrderNode #102 (First in FIFO Line)" as N102 {
+        id = 102
+        price = $100.00
+        quantity = 150
+        prev = nullptr
+        next = -> #103
+    }
+
+    object "OrderNode #103 (Second in FIFO Line)" as N103 {
+        id = 103
+        price = $100.00
+        quantity = 300
+        prev = <- #102
+        next = nullptr
+    }
+}
+
+Level1 --> N101 : "head & tail"
+Level2 --> N102 : "head (Matched 1st)"
+Level2 --> N103 : "tail (Matched 2nd)"
+N102 <-> N103 : "prev / next pointers\n(Unlink in O(1) on Cancel)"
+
+Index ..> N101 : "O(1) Lookup"
+Index ..> N102 : "O(1) Lookup"
+Index ..> N103 : "O(1) Lookup"
+
+@enduml

@@ -1,0 +1,39 @@
+@startuml
+skinparam backgroundColor #FFFFFF
+skinparam defaultFontName "SansSerif"
+skinparam defaultFontSize 13
+skinparam roundCorner 8
+skinparam shadowing false
+
+title ACME Low-Latency Trading Platform - Architecture & Data Flow
+
+package "Thread 1: Market Gateway (Producer)" #EEF6FF {
+    [Incoming Orders / Market Feed] as Feed
+}
+
+package "Lock-Free Inter-Thread Channel" #FFF8E7 {
+    component "SpscQueue<OrderEvent, 1024>\n(include/acme/spsc_queue.hpp)\n---\n* Zero Mutex Locks\n* 64-Byte Cache-Line Aligned\n* Atomic Read/Write Indices" as Queue
+}
+
+package "Thread 2: Matching Engine (Consumer - Hot Path)" #F2FBF4 {
+    component "OrderBook\n(include/acme/order_book.hpp)\n---\n* Matches Buyers vs Sellers\n* Price-Time (FIFO) Priority\n* 0 Bytes Heap Allocation" as Book
+
+    database "ObjectPool<OrderNode>\n(object_pool.hpp)\n---\nPre-allocated box of\nOrderNode slots" as Pool
+
+    database "FlatHashMap<OrderId, OrderNode*>\n(flat_hash_map.hpp)\n---\nInstant O(1) lookup by ID\nfor fast cancellation" as Map
+
+    collections "Contiguous Price Ladders\n(std::vector<PriceLevel>)\n---\n* bids_ (Best Bid at .back())\n* asks_ (Best Ask at .back())" as Ladders
+}
+
+package "Output Events" #FDF2F8 {
+    [Trade Execution Callback\n(Zero-Cost C++20 Concept)] as TradeOut
+}
+
+Feed -down-> Queue : "1. try_push(OrderEvent)\n(No OS Lock)"
+Queue -down-> Book : "2. try_pop(OrderEvent)"
+Book -right-> Ladders : "3. Check Best Price at .back()\nMatch or Rest Order"
+Book -down-> Pool : "4. Grab/Return OrderNode slot\n(No 'new' or 'delete')"
+Book -down-> Map : "5. Index OrderId -> OrderNode*\n(Cancel in ~24 CPU cycles)"
+Book -down-> TradeOut : "6. Emit Trade Event\n(Inlined Callback)"
+
+@enduml

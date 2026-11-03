@@ -1,0 +1,36 @@
+@startuml
+skinparam backgroundColor #FFFFFF
+skinparam defaultFontName "SansSerif"
+skinparam defaultFontSize 13
+skinparam roundCorner 6
+skinparam shadowing false
+
+title Step-by-Step: What Happens When You Place an Order?
+
+actor "Trader / Gateway\n(Thread 1)" as Trader
+participant "SpscQueue\n(spsc_queue.hpp)" as Queue #FFF8E7
+participant "OrderBook\n(order_book.hpp)" as Book #F2FBF4
+participant "PriceLadders\n(bids_ / asks_)" as Ladders #EEF6FF
+participant "ObjectPool & FlatHashMap\n(Memory Arena)" as Memory #FDF2F8
+
+== Phase 1: Passing the Order Between Threads (No Locks) ==
+Trader -> Queue : 1. try_push(Buy 450 shares @ $100.10)
+Queue -> Book : 2. try_pop(OrderEvent)
+
+== Phase 2: Checking if We Can Match Immediately ==
+Book -> Ladders : 3. Look at asks_.back() (Lowest / Best Ask Price = $100.05)
+note right: Does Buy Price ($100.10) >= Best Ask ($100.05)?\nYES! A trade happens immediately!
+
+Book -> Ladders : 4. Match oldest order at $100.05 first (FIFO)\nFill 100 shares from #201, then 250 shares from #202
+Book -> Memory : 5. Return filled OrderNodes (#201, #202) to ObjectPool\nand remove from FlatHashMap
+Book -> Ladders : 6. $100.05 level is now empty -> asks_.pop_back() in O(1)!
+
+== Phase 3: If Any Shares Remain Unfilled ==
+alt Order still has remaining shares (and is a Limit Order)
+    Book -> Memory : 7. Grab a pre-allocated OrderNode from ObjectPool\nand save ID -> Pointer in FlatHashMap
+    Book -> Ladders : 8. Append OrderNode to the back of its PriceLevel queue
+else Order is 100% filled
+    Book --> Trader : Done! (Zero resting shares)
+end
+
+@enduml

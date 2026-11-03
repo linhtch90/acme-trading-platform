@@ -1,0 +1,50 @@
+# Build directory and compiled binaries
+build/
+bin/
+lib/
+
+# Compiled object files & libraries
+*.o
+*.obj
+*.lo
+*.slo
+*.a
+*.la
+*.so
+*.so.*
+*.dylib
+*.dll
+*.exe
+*.out
+*.app
+*.d
+*.gch
+*.pch
+
+# Debug, sanitizer, and profiling artifacts
+core
+vgcore.*
+perf.data*
+*.gcda
+*.gcno
+*.gcov
+*.profraw
+*.profdata
+*.dSYM/
+
+# CMake / clangd / tooling
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+compile_commands.json
+.cache/
+.clangd/
+
+# Editor & OS files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
